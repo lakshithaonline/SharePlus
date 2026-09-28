@@ -33,10 +33,10 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
       WAKE_LOCK). ✅ The app launches from the TV apps row.
 - [x] 1.2 🤖 Clone `manu-tech-code/airplay-receiver` to `../reference/` and write an architecture
       summary + file map to NOTES.md (native, JNI, Kotlin player, HLS parts).
-- [ ] 1.3 🤖 Git init, `.gitignore`, first commit.
+- [x] 1.3 🤖 Git init, `.gitignore`, first commit.
 
 ## Phase 2 — Native core
-- [ ] 2.1 🤖 Vendor `third_party` (UxPlay, libplist, OpenSSL, FFmpeg) into `app/src/main/cpp`, keeping licences.
+- [x] 2.1 🤖 Vendor `third_party` (UxPlay, libplist, OpenSSL, FFmpeg) into `app/src/main/cpp`, keeping licences.
 - [ ] 2.2 🤖 CMakeLists + `externalNativeBuild` + `abiFilters` for the TV's ABI(s).
       ✅ `assembleDebug` succeeds; the `.so` files are in the APK (`unzip -l`).
 - [ ] 2.3 🤖 Port the JNI bridge (adapt package names to `com.example.shareplus`).

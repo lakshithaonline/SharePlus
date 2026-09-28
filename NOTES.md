@@ -213,3 +213,20 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
 | `kotlin/.../BootReceiver.kt` | `ACTION_BOOT_COMPLETED` → starts the service if a pref is set |
 | `cpp/patches/UxPlay/000{1-6}-*.patch` | 6 upstream UxPlay bugfixes: HLS crashes/UAF (3), sender compat, abandoned-connection video reset, volume-while-paused |
 | `kotlin/.../renderer/VideoDownloader.kt`, `ui/*`, `audio/Dacp*.kt`, `EglCore.kt` | Not deep-read — download-video button, Compose UI, DACP remote metadata, low-priority EGL helper |
+
+## Phase 2 — Native core
+
+### 2.1 — Vendored third_party (done)
+- Copied `UxPlay`, `libplist`, `openssl`, `openssl-cmake`, `ffmpeg` (147M total) verbatim from the
+  reference repo's already-vendored/trimmed/patched trees into
+  `app/src/main/cpp/third_party/`, plus `PROVENANCE.md` (added a note that SharePlus copied this
+  from `manu-tech-code/airplay-receiver` rather than re-fetching upstream) and the UxPlay patch
+  record (`app/src/main/cpp/patches/UxPlay/*.patch`, already applied — informational only, matches
+  Phase 1.2's notes on why HLS needed 3 of the 6 patches).
+- License files verified present in every vendored dir: `UxPlay/LICENSE` (GPL-3.0),
+  `libplist/COPYING`+`COPYING.LESSER` (LGPL-2.1), `openssl-cmake/LICENSE` (MPL-2.0),
+  `openssl/LICENSE.txt` (Apache-2.0), `ffmpeg/COPYING.GPLv2`+`COPYING.GPLv3`+`COPYING.LGPLv2.1`+
+  `COPYING.LGPLv3`+`LICENSE.md`. Per CLAUDE.md rule 8 these must stay — resulting app is GPL-3.0
+  because of UxPlay regardless of the other components' more permissive licenses.
+- Not yet building anything with this — that's 2.2 (CMakeLists + externalNativeBuild). NDK/CMake
+  still not installed (see 0.1) — need to resolve before 2.2 can succeed.
