@@ -31,7 +31,7 @@ academic exercise: **Claude Code owns development end to end.**
 4. **Testing loop (use it every time):**
    - Build: `./gradlew assembleDebug`
    - Install: `adb install -r app/build/outputs/apk/debug/app-debug.apk`
-   - Launch: `adb shell am start -n com.example.shareplus/.MainActivity`
+   - Launch: `adb shell am start -n com.lakshithaonline.shareplus/com.example.shareplus.MainActivity`
    - Logs: `adb logcat -c` then `adb logcat -s SharePlus:V UxPlay:V AndroidRuntime:E MediaCodec:W`
    - Screenshot the TV: `adb exec-out screencap -p > tv.png`, then look at it
    - Crashes: search logcat for `FATAL EXCEPTION` / `tombstone` and fix the root cause

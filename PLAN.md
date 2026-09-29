@@ -76,9 +76,9 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
 - [ ] 7.4 🤖 Fix every issue found; log each in NOTES.md.
 
 ## Phase 8 — Release
-- [ ] 8.1 🤖 Release signing config (keystore outside the repo, tell the user to back it up).
+- [x] 8.1 🤖 Release signing config (keystore outside the repo, tell the user to back it up).
 - [ ] 8.2 🤖 `assembleRelease` (R8/ProGuard rules for JNI classes), install, re-test Phase 4–5.
-- [ ] 8.3 🤖 README: how to install on the TV, licence (GPLv3), credits.
+- [x] 8.3 🤖 README: how to install on the TV, licence (GPLv3), credits.
 
 ## Phase 9 — Background receiver, idle screen, quality, HLS, sleep handling
 > **Depends on Phases 1–8 being done first** (vendored UxPlay, JNI bridge, working video/audio

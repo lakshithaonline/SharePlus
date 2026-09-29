@@ -81,6 +81,9 @@ class SettingsActivity : ComponentActivity() {
 
         section("About")
         row("Version", versionName()) {}
+        row("Developer", DEVELOPER) {}
+        row("Email", DEV_EMAIL) {}
+        row("GitHub", "github.com/$DEV_GITHUB") {}
         row("IP Address", AirPlayState.ipAddress.value ?: "Not connected") {}
         row("Open-Source Licences", "") { showLicences() }
 
@@ -157,6 +160,7 @@ class SettingsActivity : ComponentActivity() {
     private fun showLicences() {
         val text = """
             SharePlus is free software under the GNU General Public License v3.
+            Developed by $DEVELOPER ($DEV_EMAIL, github.com/$DEV_GITHUB).
 
             It is built on:
             • UxPlay — AirPlay server (GPL-3.0), by F. Duncanh and contributors
@@ -178,4 +182,10 @@ class SettingsActivity : ComponentActivity() {
 
     private fun versionName(): String =
         runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "1.0"
+
+    private companion object {
+        const val DEVELOPER = "Lakshitha Geethmal"
+        const val DEV_EMAIL = "lakshithageethmal@gmail.com"
+        const val DEV_GITHUB = "lakshithaonline"
+    }
 }

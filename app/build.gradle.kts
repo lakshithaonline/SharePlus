@@ -1,6 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// release signing key lives outside the repo; local.properties (gitignored) points at a
+// properties file with storeFile/storePassword/keyAlias/keyPassword. See README "Building".
+val releaseSigning: Properties? = run {
+    val local = Properties().apply {
+        rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    val path = local.getProperty("shareplus.keystore") ?: return@run null
+    val f = file(path)
+    if (!f.exists()) null else Properties().apply { f.inputStream().use { load(it) } }
 }
 
 android {
@@ -11,7 +24,8 @@ android {
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.example.shareplus"
+        // store-safe id; the Kotlin/JNI package stays com.example.shareplus (namespace above)
+        applicationId = "com.lakshithaonline.shareplus"
         minSdk = 30
         targetSdk = 37
         versionCode = 1
@@ -35,11 +49,25 @@ android {
         }
     }
 
+    signingConfigs {
+        releaseSigning?.let { p ->
+            create("release") {
+                storeFile = file(p.getProperty("storeFile"))
+                storePassword = p.getProperty("storePassword")
+                keyAlias = p.getProperty("keyAlias")
+                keyPassword = p.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // R8 stays off: native code finds NativeBridge/RaopCallbackHandler/onLog by name
+            // via JNI, and the app is small enough that shrinking buys little
             optimization {
                 enable = false
             }
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {

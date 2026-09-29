@@ -286,3 +286,16 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   (minSdk 30 always uses `mipmap-anydpi-v26`).
 - Gotcha: installing an update makes the Google TV launcher relaunch the app ~4 s later; a
   simulated keypress in that window is lost.
+
+## Phase 8 — Release 1.0 (2026-09-29)
+- Release key: `C:/Users/laksh/keystores/shareplus-release.jks` (RSA 4096, 100 years), passwords
+  in `shareplus-keystore.properties` next to it; `local.properties` → `shareplus.keystore=`.
+  **Both files are outside the repo, so the user must back up that folder.** Losing it means
+  future updates can't install over 1.0.
+- applicationId is now `com.lakshithaonline.shareplus` (Kotlin namespace/JNI package unchanged:
+  `com.example.shareplus`). The debug build `com.example.shareplus` was uninstalled from the TV.
+- R8 left off on purpose: JNI looks up NativeBridge / RaopCallbackHandler / onLog by name.
+- Verified: apksigner shows the release cert, aapt2 badging has no debuggable flag, and on the
+  TV the server starts and registers `_airplay._tcp` / `_raop._tcp` as "SharePlus".
+  8.2 is not ticked: mirroring hasn't been re-tested with the iPhone on the release build yet.
+- Added README.md (install, build, licence, credits, developer contact) and root LICENSE (GPLv3).
