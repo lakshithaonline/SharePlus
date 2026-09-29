@@ -299,3 +299,12 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   TV the server starts and registers `_airplay._tcp` / `_raop._tcp` as "SharePlus".
   8.2 is not ticked: mirroring hasn't been re-tested with the iPhone on the release build yet.
 - Added README.md (install, build, licence, credits, developer contact) and root LICENSE (GPLv3).
+
+## Cleanup before GitHub (2026-09-29)
+- GitHub push protection rejected the first push: `third_party/openssl/apps/rsa8192.pem` (a
+  public sample key shipped in OpenSSL's source) looks like a private key.
+- Removed everything the build no longer uses: vendored OpenSSL + openssl-cmake + FFmpeg (and
+  their CMake helpers, the FFmpeg ALAC code), UxPlay's desktop program/renderers/beacon scripts,
+  libplist's autotools/docs/tests/fuzz, and Jetpack Compose (UI is plain views; theme is now
+  `Theme.DeviceDefault.Light.NoActionBar`). Release APK 27.9 MB → 9.4 MB; clean build passes.
+- `.gitignore` now also covers APKs, keystores, logs, IDE folders and device screenshots.

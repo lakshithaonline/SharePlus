@@ -16,17 +16,6 @@
 #include <thread>
 #include <vector>
 
-// ffmpeg is an optional software-ALAC fallback (audio-only AirPlay). Screen mirroring uses
-// AAC-ELD via MediaCodec, so SharePlus builds without it by default -- see NOTES.md 2.2.
-#ifdef SHAREPLUS_HAVE_FFMPEG
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/log.h>
-#include <libavutil/mem.h>
-#include <libavutil/samplefmt.h>
-}
-#endif
 
 #include "audio_time.h"
 #include "log_sink.h"
@@ -226,128 +215,6 @@ private:
     std::atomic<bool> mDrainRun{false};   // drain thread stop signal
 };
 
-#ifdef SHAREPLUS_HAVE_FFMPEG
-// route ffmpeg warnings/errors to logcat
-static inline void installFfmpegLogcat() {
-    static std::once_flag once;
-    std::call_once(once, [] {
-        av_log_set_level(AV_LOG_WARNING);
-        av_log_set_callback([](void *, int level, const char *fmt, va_list vl) {
-            if (level > av_log_get_level()) return;
-            __android_log_vprint(level <= AV_LOG_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_WARN,
-                                 "ffmpeg", fmt, vl);
-        });
-    });
-}
-
-// software ALAC via ffmpeg libavcodec; synchronous, decodes on caller's thread
-class FfmpegAlacDecoder : public Decoder {
-public:
-    // returns nullptr if codec can't be created/opened
-    static std::unique_ptr<FfmpegAlacDecoder> make(int sampleRate, int channels, int spf,
-                                                   TimelineBuffer &timeline, LatencyReporter &lat,
-                                                   LogSink &log) {
-        installFfmpegLogcat();
-        auto dec = std::unique_ptr<FfmpegAlacDecoder>(new FfmpegAlacDecoder(timeline, lat, log));
-        if (!dec->init(sampleRate, channels, spf)) return nullptr;
-        return dec;
-    }
-
-    ~FfmpegAlacDecoder() override {
-        if (mFrame) av_frame_free(&mFrame);
-        if (mPkt) av_packet_free(&mPkt);
-        if (mCtx) avcodec_free_context(&mCtx);
-    }
-
-    bool decode(const uint8_t *data, size_t len, int64_t ptsNs) override {
-        if (len == 0 || len > INT_MAX - AV_INPUT_BUFFER_PADDING_SIZE) return false;
-        const int64_t t0 = monoNs();
-
-        if (mPkt->size < (int)len) {
-            if (av_grow_packet(mPkt, (int)len - mPkt->size) < 0) return false;
-        } else {
-            av_shrink_packet(mPkt, (int)len);
-        }
-        memcpy(mPkt->data, data, len);
-
-        if (avcodec_send_packet(mCtx, mPkt) < 0) return false;
-
-        int64_t pts = ptsNs;
-        // the current libavcodec ALAC decoder always produces exactly 1 output
-        // frame for each input packet, this loop is only for completeness
-        while (avcodec_receive_frame(mCtx, mFrame) == 0) {
-            const int n = mFrame->nb_samples;
-            if (n <= 0) continue;
-            if (mFrame->format == AV_SAMPLE_FMT_S16) {
-                // this branch is not used as current libavcodec decoder cannot produce AV_SAMPLE_FMT_S16
-                mTimeline.write((const int16_t *)mFrame->data[0], (size_t)n * mChannels, pts);
-            } else if (mFrame->format == AV_SAMPLE_FMT_S16P) {
-                // timeline expects packed/interleaved (AV_SAMPLE_FMT_S16), decoder gives planar
-                if (mPcm.size() < (size_t)n * mChannels) mPcm.resize((size_t)n * mChannels);
-                for (int c = 0; c < mChannels; c++) {
-                    const int16_t *p = (const int16_t *)mFrame->data[c];
-                    for (int i = 0; i < n; i++) mPcm[(size_t)i * mChannels + c] = p[i];
-                }
-                mTimeline.write(mPcm.data(), (size_t)n * mChannels, pts);
-            } else {
-                mLog.error("ffmpeg ALAC: unsupported sample format %d", mFrame->format);
-                return false;
-            }
-            pts += (int64_t)n * NS_PER_SEC / mCtx->sample_rate;
-        }
-
-        mLat.record(monoNs() - t0);
-        mLat.setHeld(0);
-        return true;
-    }
-
-private:
-    FfmpegAlacDecoder(TimelineBuffer &timeline, LatencyReporter &lat, LogSink &log)
-        : mTimeline(timeline), mLat(lat), mLog(log) {}
-
-    bool init(int sampleRate, int channels, int spf) {
-        const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_ALAC);
-        if (!codec) { mLog.error("ffmpeg ALAC decoder not compiled in"); return false; }
-        mCtx = avcodec_alloc_context3(codec);
-        if (!mCtx) return false;
-
-        // decoder expects atom + magic cookie via extradata
-        // extradata must be alloced with av_malloc* and have AV_INPUT_BUFFER_PADDING_SIZE of
-        // 0-padding at the end
-        mCtx->extradata = (uint8_t *)av_mallocz(36 + AV_INPUT_BUFFER_PADDING_SIZE);
-        if (!mCtx->extradata) return false;
-        buildAlacAtomCookie(mCtx->extradata, sampleRate, channels, spf);
-        mCtx->extradata_size = 36;
-
-        mCtx->sample_rate = sampleRate;
-        av_channel_layout_default(&mCtx->ch_layout, channels);
-        mCtx->thread_count = 1;
-
-        if (avcodec_open2(mCtx, codec, nullptr) < 0) {
-            mLog.error("ffmpeg ALAC open failed (rate=%d ch=%d spf=%d)", sampleRate, channels, spf);
-            return false;
-        }
-
-        mPkt = av_packet_alloc();
-        mFrame = av_frame_alloc();
-        if (!mPkt || !mFrame) return false;
-        // alloc packet buffer, sized for largest possible ALAC packet ("escape" frame + 8-byte header).
-        if (av_new_packet(mPkt, spf * channels * (int)sizeof(int16_t) + 8) < 0) return false;
-        mChannels = channels;
-        mPcm.resize((size_t)spf * channels);
-        return true;
-    }
-
-    AVCodecContext *mCtx = nullptr;  // owned
-    AVPacket *mPkt = nullptr;        // owned
-    AVFrame *mFrame = nullptr;       // owned
-    std::vector<int16_t> mPcm;       // interleave scratch
-    TimelineBuffer &mTimeline;
-    LatencyReporter &mLat;
-    LogSink &mLog;
-    int mChannels;
-};
-#endif  // SHAREPLUS_HAVE_FFMPEG
 
 // ---- decoder factories ----
 // create + configure + start AMediaCodec for `mime` with `fmt` (consumes fmt); tries
@@ -435,13 +302,8 @@ static inline std::unique_ptr<Decoder> makeDecoder(int ct, int spf, int sampleRa
                 return std::make_unique<MediaCodecDecoder>(codec, timeline, lat);
             }
         }
-#ifdef SHAREPLUS_HAVE_FFMPEG
-        if (auto sw = FfmpegAlacDecoder::make(sampleRate, channels, spf, timeline, lat, log)) {
-            log.info("ALAC: software decoder (ffmpeg)%s", forceSwAlac ? " (forced)" : "");
-            return sw;
-        }
-#endif
-        log.error("ALAC init failed (hw and sw)");
+        // no software fallback: SharePlus advertises AAC only (NOTES.md 2.2)
+        log.error("ALAC init failed (no hardware decoder)");
         return nullptr;
     }
     if (AMediaCodec *codec = startAacCodec(ct, spf, sampleRate, channels, log,

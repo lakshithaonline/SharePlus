@@ -167,7 +167,6 @@ class SettingsActivity : ComponentActivity() {
             • android-airplay-server by jqssun, and airplay-receiver by manu-tech-code (GPL-3.0)
             • libplist — libimobiledevice project (LGPL-2.1)
             • OpenSSL (Apache-2.0)
-            • FFmpeg (LGPL/GPL)
             • Oboe — Google (Apache-2.0)
             • AndroidX — Google (Apache-2.0)
 

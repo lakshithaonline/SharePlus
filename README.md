@@ -58,7 +58,7 @@ SharePlus is free software, released under the **GNU General Public License v3**
 - [jqssun/android-airplay-server](https://github.com/jqssun/android-airplay-server) and
   [manu-tech-code/airplay-receiver](https://github.com/manu-tech-code/airplay-receiver): Android
   port and JNI bridge this app is based on (GPL-3.0)
-- libplist (LGPL-2.1), OpenSSL (Apache-2.0), FFmpeg (LGPL/GPL), Oboe and AndroidX (Apache-2.0)
+- libplist (LGPL-2.1), OpenSSL (Apache-2.0, prebuilt package), Oboe and AndroidX (Apache-2.0)
 
 AirPlay, iPhone and Apple TV are trademarks of Apple Inc. SharePlus is not affiliated with Apple.
 

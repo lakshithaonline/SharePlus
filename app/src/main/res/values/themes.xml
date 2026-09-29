@@ -1,4 +1,6 @@
 <resources>
-
-    <style name="Theme.SharePlus" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <!-- plain platform light theme; the TV screens draw their own Apple-style views -->
+    <style name="Theme.SharePlus" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>

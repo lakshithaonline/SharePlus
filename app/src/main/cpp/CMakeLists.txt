@@ -9,38 +9,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffile-prefix-map=${CMAKE_SOURCE_DIR}=. 
 
 set(UXPLAY_LIB third_party/UxPlay/lib)
 
-string(REGEX MATCH "[0-9]+" AIRPLAY_ANDROID_API "${ANDROID_PLATFORM}")
-list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-
-# ---------- OpenSSL ----------
-# Default: Google's prebuilt OpenSSL Prefab AAR (com.android.ndk.thirdparty:openssl).
-# Building the vendored third_party/openssl needs perl + GNU make + a POSIX shell,
-# which a plain Windows host doesn't have (NOTES.md 2.2). On Linux/macOS hosts,
-# -DSHAREPLUS_VENDORED_OPENSSL=ON builds the vendored 3.4.4 tree instead.
-option(SHAREPLUS_VENDORED_OPENSSL "Build OpenSSL from third_party/openssl" OFF)
-if(SHAREPLUS_VENDORED_OPENSSL)
-    set(BUILD_OPENSSL ON CACHE BOOL "" FORCE)
-    set(OPENSSL_BUILD_VERSION "3.4.4" CACHE STRING "" FORCE)
-    set(OPENSSL_VENDORED_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openssl"
-        CACHE PATH "In-tree OpenSSL source" FORCE)
-    set(CROSS_ANDROID ON CACHE BOOL "" FORCE)
-    set(OPENSSL_PARAMS "no-tests" CACHE STRING "" FORCE)
-    set(FORWARD_ANDROID_NDK_ROOT "${ANDROID_NDK}" CACHE STRING "" FORCE)
-    add_subdirectory(third_party/openssl-cmake)
-    set(SHAREPLUS_CRYPTO crypto)
-else()
-    find_package(openssl REQUIRED CONFIG)
-    set(SHAREPLUS_CRYPTO openssl::crypto)
-endif()
+# ---------- OpenSSL (Google's prebuilt Prefab AAR, com.android.ndk.thirdparty:openssl) ----------
+# building OpenSSL from source needs perl + GNU make + a POSIX shell (NOTES.md 2.2)
+find_package(openssl REQUIRED CONFIG)
 
 # ---------- Oboe (low-latency audio output, via prefab AAR) ----------
 find_package(oboe REQUIRED CONFIG)
-
-# ---------- ffmpeg (optional software ALAC decoder; off: mirroring audio is AAC-ELD) ----------
-option(SHAREPLUS_FFMPEG "Build ffmpeg for software ALAC decode (needs a POSIX host)" OFF)
-if(SHAREPLUS_FFMPEG)
-    include(BuildFFmpeg)
-endif()
 
 # ---------- libplist (built from vendored source) ----------
 set(PLIST_SRC third_party/libplist/src)
@@ -133,12 +107,6 @@ add_library(airplay_native SHARED
     ${AIRPLAY_SOURCES}
     ${BRIDGE_SOURCES}
 )
-if(SHAREPLUS_FFMPEG)
-    add_dependencies(airplay_native ffmpeg_ep)
-    target_compile_definitions(airplay_native PRIVATE SHAREPLUS_HAVE_FFMPEG)
-    target_link_libraries(airplay_native ffmpeg::avcodec)
-endif()
-
 target_include_directories(airplay_native PRIVATE
     ${UXPLAY_LIB}
     ${UXPLAY_LIB}/llhttp
@@ -158,7 +126,7 @@ target_link_options(airplay_native PRIVATE "-Wl,--build-id=none")
 target_link_libraries(airplay_native
     llhttp
     playfair
-    ${SHAREPLUS_CRYPTO}
+    openssl::crypto
     plist
     oboe::oboe
     mediandk

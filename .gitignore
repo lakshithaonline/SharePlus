@@ -1,17 +1,38 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-app/build
+# --- Gradle / build output ---
+.gradle/
+.kotlin/
+build/
 /captures
 .externalNativeBuild
-.cxx
+.cxx/
+
+# --- local machine config (SDK path, release keystore pointer) ---
 local.properties
-gradle_build.log
+
+# --- signing keys: never commit (the release key lives outside the repo) ---
+*.jks
+*.keystore
+*keystore.properties
+
+# --- built packages ---
+*.apk
+*.aab
+*.ap_
+output-metadata.json
+
+# --- IDE ---
+*.iml
+.idea/
+.vscode/
+.fleet/
+
+# --- logs, dumps, screenshots from device testing ---
+*.log
+*.hprof
+tv.png
+*.bin
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini

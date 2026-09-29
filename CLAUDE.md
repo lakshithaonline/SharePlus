@@ -9,7 +9,7 @@ academic exercise: **Claude Code owns development end to end.**
 - Language: Kotlin (app) + C/C++ via NDK/JNI (AirPlay core)
 - AirPlay protocol core: **UxPlay** (GPLv3, confirmed working with iOS 26)
 - Base / reference: `manu-tech-code/airplay-receiver` (fork of jqssun/android-airplay-server,
-  all native deps — UxPlay, libplist, OpenSSL, FFmpeg — vendored in-tree)
+  UxPlay + libplist vendored in-tree; OpenSSL + Oboe from prebuilt Prefab AARs)
 - Plan + progress: `PLAN.md`
 
 ## SDK rules (important)
@@ -41,7 +41,7 @@ academic exercise: **Claude Code owns development end to end.**
    Tell me what the TV shows." Then continue from logcat.
 6. Fix root causes, not symptoms. Don't disable features to make an error go away without saying so.
 7. Keep a short `NOTES.md` log of problems hit and how they were fixed.
-8. Keep GPLv3 licence files and credits (UxPlay, jqssun, manu-tech-code, FFmpeg).
+8. Keep GPLv3 licence files and credits (UxPlay, jqssun, manu-tech-code, libplist, OpenSSL).
 
 ## Log tags
 - Kotlin: `SharePlus`
