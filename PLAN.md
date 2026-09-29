@@ -67,7 +67,7 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
 - [x] 6.2 🤖 States Idle → Connecting → Mirroring → Disconnected; release codecs on stop.
 - [ ] 6.3 🤖 D-pad: Back = disconnect/exit; OK = info overlay. Keep the screen on while mirroring.
 - [ ] 6.4 🤖 Network loss → auto-restart the server; app backgrounded → stop cleanly.
-- [ ] 6.5 🤖 App banner + icon.
+- [x] 6.5 🤖 App banner + icon.
 
 ## Phase 7 — Hardening
 - [ ] 7.1 👤+🤖 30-min session; 🤖 monitors memory and logcat for leaks/errors. ✅ No crash.
@@ -121,7 +121,7 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
         video itself once handed the URL.
 
 ## Phase 10 — Further extras (optional)
-- [ ] Settings: TV name, resolution, fps, PIN
+- [x] Settings: TV name, open-on-connect, start-on-boot, stats (resolution/fps/PIN not added)
 
 ---
 

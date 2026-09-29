@@ -274,3 +274,15 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   HEVC 998x2160 at ~46 fps and `OMX.MS.HEVC.Decoder` output was **green and smeared**. Pinning
   SDR BT.709 colour keys was tried but never verified; user chose to go back to 1080p H.264,
   which is clean. Screenshot of the failure mode was taken via `screencap`.
+
+## Settings + app icon (2026-09-29)
+- The "menu with settings" the user remembered was the jqssun test APK from Phase 0.5, not
+  SharePlus. Added `SettingsActivity` (tvOS-style list): TV name (restarts the server so the
+  iPhone sees the new name), open-on-connect, start-on-boot, performance stats, version/IP,
+  open-source licences (GPL credits per CLAUDE.md rule 8). Settings button on the home screen
+  (focused by default); MENU key also opens it.
+- App icon: adaptive vector (white AirPlay glyph on blue→indigo gradient, same as the home
+  card); TV banner PNGs rendered with PIL (`drawable-*/banner.png`). Template robot webps removed
+  (minSdk 30 always uses `mipmap-anydpi-v26`).
+- Gotcha: installing an update makes the Google TV launcher relaunch the app ~4 s later; a
+  simulated keypress in that window is lost.

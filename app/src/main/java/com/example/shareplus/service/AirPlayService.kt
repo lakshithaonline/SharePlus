@@ -23,6 +23,7 @@ import com.example.shareplus.AirPlayState
 import com.example.shareplus.AirPlayState.Phase
 import com.example.shareplus.MainActivity
 import com.example.shareplus.R
+import com.example.shareplus.Settings
 import com.example.shareplus.bridge.NativeBridge
 import com.example.shareplus.bridge.RaopCallbackHandler
 import com.example.shareplus.video.VideoRenderer
@@ -72,7 +73,11 @@ class AirPlayService : Service(), RaopCallbackHandler {
             .registerDefaultNetworkCallback(networkCallback)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // TV name changed in Settings: re-register under the new name
+        if (intent?.action == ACTION_RESTART) restartServer()
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         runCatching {
@@ -114,7 +119,8 @@ class AirPlayService : Service(), RaopCallbackHandler {
         val keyFile = filesDir.resolve("airplay.pem").absolutePath
         // nohold: a new connection takes over a stale one, so reconnecting after the
         // iPhone locked never gets refused
-        handle = NativeBridge.nativeInit(this, deviceId(), SERVER_NAME, keyFile, true, false)
+        val tvName = Settings(this).tvName
+        handle = NativeBridge.nativeInit(this, deviceId(), tvName, keyFile, true, false)
         if (handle == 0L) {
             Log.e(TAG, "native init failed")
             AirPlayState.phase.value = Phase.STOPPED
@@ -142,7 +148,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
             return
         }
 
-        val name = NativeBridge.nativeGetServerName(handle) ?: SERVER_NAME
+        val name = NativeBridge.nativeGetServerName(handle) ?: tvName
         nsd = NsdPublisher(this).apply {
             register("_raop._tcp", NativeBridge.nativeGetRaopServiceName(handle) ?: "SharePlus",
                 port, NativeBridge.nativeGetRaopTxtRecords(handle) ?: emptyMap())
@@ -202,7 +208,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     private fun bringToFront() {
-        if (AirPlayState.activityVisible.value) return
+        if (AirPlayState.activityVisible.value || !Settings(this).autoOpen) return
         // allowed from a foreground service (background-activity-start exemption)
         startActivity(Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
@@ -298,7 +304,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
         private const val TAG = "SharePlus"
         private const val CHANNEL = "receiver"
         private const val NOTIFICATION_ID = 1
-        private const val SERVER_NAME = "SharePlus"
+        const val ACTION_RESTART = "com.example.shareplus.RESTART"
         private const val PAUSED_MS = 10_000L
 
         // shared with MainActivity, which attaches its SurfaceView to it
@@ -306,6 +312,11 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, AirPlayService::class.java))
+        }
+
+        fun restart(context: Context) {
+            ContextCompat.startForegroundService(context,
+                Intent(context, AirPlayService::class.java).setAction(ACTION_RESTART))
         }
     }
 }

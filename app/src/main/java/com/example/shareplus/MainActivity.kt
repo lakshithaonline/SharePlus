@@ -1,5 +1,6 @@
 package com.example.shareplus
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -22,6 +23,16 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.example.shareplus.AirPlayState.Phase
 import com.example.shareplus.service.AirPlayService
+import com.example.shareplus.ui.Ui
+import com.example.shareplus.ui.Ui.BLUE
+import com.example.shareplus.ui.Ui.FILL
+import com.example.shareplus.ui.Ui.GREEN
+import com.example.shareplus.ui.Ui.GREY
+import com.example.shareplus.ui.Ui.HAIRLINE
+import com.example.shareplus.ui.Ui.INK
+import com.example.shareplus.ui.Ui.ORANGE
+import com.example.shareplus.ui.Ui.SECONDARY
+import com.example.shareplus.ui.Ui.TERTIARY
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -43,9 +54,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var step3: TextView
     private lateinit var footer: TextView
     private lateinit var stats: TextView
+    private lateinit var settingsButton: View
+    private var wasMirroring = false
 
-    private val density get() = resources.displayMetrics.density
-    private fun dp(v: Int) = (v * density).toInt()
+    private fun dp(v: Int) = Ui.dp(this, v)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +100,14 @@ class MainActivity : ComponentActivity() {
         // the SurfaceView stays VISIBLE (surface alive) under the home screen, so showing
         // the home screen never tears down a running decoder
         home.visibility = if (mirroring) View.GONE else View.VISIBLE
-        if (!mirroring) stats.visibility = View.GONE
+        if (mirroring && !wasMirroring) {
+            stats.visibility = if (Settings(this).showStats) View.VISIBLE else View.GONE
+        }
+        if (!mirroring) {
+            stats.visibility = View.GONE
+            if (!settingsButton.hasFocus()) settingsButton.requestFocus()
+        }
+        wasMirroring = mirroring
 
         if (phase != Phase.IDLE && phase != Phase.STOPPED && phase != Phase.PAUSED) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -147,28 +166,24 @@ class MainActivity : ComponentActivity() {
                     return true
                 }
             }
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS -> {
+                openSettings()
+                return true
+            }
         }
         return super.onKeyDown(keyCode, event)
     }
 
     // ---- views ----
 
-    private fun label(sizeSp: Float, color: Int, weight: String = "sans-serif") = TextView(this).apply {
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
-        setTextColor(color)
-        typeface = Typeface.create(weight, Typeface.NORMAL)
-        includeFontPadding = false
-    }
+    private fun openSettings() = startActivity(Intent(this, SettingsActivity::class.java))
 
-    private fun rounded(color: Int, radiusDp: Int) = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = dp(radiusDp).toFloat()
-    }
+    private fun label(sizeSp: Float, color: Int, family: String = "sans-serif") =
+        Ui.label(this, sizeSp, color, family)
 
-    private fun oval(color: Int) = GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
-        setColor(color)
-    }
+    private fun rounded(color: Int, radiusDp: Int) = Ui.rounded(this, color, radiusDp)
+
+    private fun oval(color: Int) = Ui.oval(color)
 
     private fun buildViews() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
@@ -182,20 +197,37 @@ class MainActivity : ComponentActivity() {
         root.addView(mirrorView, fullscreen())
 
         home = FrameLayout(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.rgb(251, 251, 253), Color.rgb(232, 232, 237)))
+            background = Ui.backdrop()
+            clipChildren = false  // focused Settings button grows past its row
         }
 
         // top bar: wordmark left, time right (like tvOS)
         home.addView(label(18f, INK, "sans-serif-medium").apply { text = "SharePlus" },
             FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { setMargins(dp(56), dp(40), 0, 0) })
-        home.addView(TextClock(this).apply {
+        val topRight = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+        }
+        settingsButton = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(9), dp(20), dp(9))
+            addView(ImageView(this@MainActivity).apply { setImageResource(R.drawable.ic_settings) },
+                LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginEnd = dp(8) })
+            addView(label(16f, INK, "sans-serif-medium").apply { text = "Settings" })
+            setOnClickListener { openSettings() }
+        }
+        Ui.focusable(settingsButton, 22, rest = Color.argb(140, 255, 255, 255), grow = 1.08f)
+        topRight.addView(settingsButton, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(28) })
+        topRight.addView(TextClock(this).apply {
             format12Hour = "h:mm a"
             format24Hour = "HH:mm"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             setTextColor(INK)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(40), dp(56), 0) })
+        })
+        home.addView(topRight, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(32), dp(56), 0) })
 
         card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -267,16 +299,4 @@ class MainActivity : ComponentActivity() {
         setContentView(root)
     }
 
-    private companion object {
-        // Apple system colours (light)
-        val INK = Color.rgb(29, 29, 31)
-        val SECONDARY = Color.rgb(110, 110, 115)
-        val TERTIARY = Color.rgb(134, 134, 139)
-        val HAIRLINE = Color.rgb(229, 229, 234)
-        val FILL = Color.rgb(242, 242, 247)
-        val GREEN = Color.rgb(52, 199, 89)
-        val ORANGE = Color.rgb(255, 159, 10)
-        val BLUE = Color.rgb(0, 122, 255)
-        val GREY = Color.rgb(174, 174, 178)
-    }
 }
