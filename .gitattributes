@@ -1,0 +1,6 @@
+# Vendored third_party (UxPlay, libplist, OpenSSL, ffmpeg) must keep exactly the line endings
+# it was built and tested with: LF. A Windows checkout with core.autocrlf=true otherwise
+# silently rewrites shell/Perl scripts (ffmpeg's `configure`, openssl's util/*.pl, etc.) to
+# CRLF, which breaks them under bash ("No such file or directory" on the shebang interpreter).
+# See NOTES.md Phase 2.2 for the failure this caused.
+app/src/main/cpp/third_party/** -text

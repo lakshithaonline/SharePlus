@@ -75,6 +75,30 @@ The build itself uses `--disable-all --enable-avcodec --enable-decoder=alac`.
 without them. Removing `test/` additionally requires the `no-tests` flag, which
 `../CMakeLists.txt` passes through `OPENSSL_PARAMS`.
 
+### `openssl` — added a host-Perl compatibility shim (SharePlus, not upstream)
+
+`util/perl/Locale/Maketext/Simple.pm` is a new file, not part of upstream OpenSSL. Git for
+Windows bundles a minimal Perl that lacks the optional `Locale::Maketext::Simple` module,
+which core Perl's `IPC::Cmd` (required transitively by `Configure`) uses only to translate
+its own warning/log messages (`use Locale::Maketext::Simple Style => 'gettext'`). Without
+it, `Configure` fails immediately with "Can't locate Locale/Maketext/Simple.pm". The shim
+exports a `loc()` doing plain `%1`/`%2` gettext-style substitution with no translation --
+it only exists to satisfy the `use`, and only affects Windows-hosted builds (Perl finds
+`openssl/util/perl` before the system module search path). See NOTES.md Phase 2.2.
+
+### `openssl` — patched `Configurations/15-android.conf` (SharePlus, not upstream)
+
+The NDK-toolchain auto-detection in this file matches `which("clang")` (and 3 similar calls)
+against `$ndk` using regexes with hardcoded forward slashes. That's fine on a POSIX host, and
+even on Windows under Git's own bundled (MSYS-native) Perl, which returns forward-slash paths --
+but breaks under a native Win32 Perl (Strawberry Perl, which this project's Windows build uses
+for its complete core module set; see the `util/perl/Locale/Maketext/Simple.pm` entry above),
+whose `which()`/`canonpath()` return backslash-joined Windows paths, so the regexes never match
+and Configure falls through to demanding a long-removed `arm-linux-androideabi-gcc` binary that
+no modern NDK ships. Added a `which_fwd()` wrapper (normalizes backslashes to forward slashes)
+and normalized `$ndk` the same way; used both in place of the 4 `which(...)` regex matches in
+`android_ndk()`. Windows-hosted build only; behavior for a real POSIX host Perl is unchanged.
+
 ## Licensing
 
 UxPlay is GPL-3.0, so the resulting application is subject to GPL-3.0 terms.
