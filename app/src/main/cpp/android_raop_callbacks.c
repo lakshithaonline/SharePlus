@@ -11,15 +11,30 @@
 #include "android_raop_callbacks.h"
 #include "audio_engine.h"
 
-#define TAG "AirPlayNative"
+#define TAG "UxPlay"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+
+/* RAOP threads come and go per session; ART aborts if a thread exits while still
+   attached, so every thread we attach gets a TLS destructor that detaches it */
+static pthread_key_t _detach_key;
+static pthread_once_t _detach_once = PTHREAD_ONCE_INIT;
+
+static void _detach_thread(void *vm) {
+    if (vm) (*(JavaVM *)vm)->DetachCurrentThread((JavaVM *)vm);
+}
+
+static void _make_detach_key(void) {
+    pthread_key_create(&_detach_key, _detach_thread);
+}
 
 static JNIEnv *_get_env(android_callback_ctx_t *ctx) {
     JNIEnv *env = NULL;
     int status = (*ctx->jvm)->GetEnv(ctx->jvm, (void **)&env, JNI_VERSION_1_6);
     if (status == JNI_EDETACHED) {
-        (*ctx->jvm)->AttachCurrentThread(ctx->jvm, &env, NULL);
+        if ((*ctx->jvm)->AttachCurrentThread(ctx->jvm, &env, NULL) != JNI_OK) return NULL;
+        pthread_once(&_detach_once, _make_detach_key);
+        pthread_setspecific(_detach_key, ctx->jvm);
     }
     /* Clear any pending exception from a previous callback on this thread,
        otherwise JNI calls like NewByteArray will fatally abort. */

@@ -21,7 +21,7 @@ extern "C" {
 #include "audio_engine.h"
 #include "log_sink.h"
 
-#define TAG "AirPlayNative"
+#define TAG "UxPlay"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
@@ -37,10 +37,11 @@ typedef struct {
 } server_ctx_t;
 
 static void _log_callback(void *cls, int level, const char *msg) {
+    /* UxPlay logger levels are syslog-style: lower = more severe */
     int prio = ANDROID_LOG_DEBUG;
-    if (level >= 5) prio = ANDROID_LOG_ERROR;
-    else if (level >= 4) prio = ANDROID_LOG_WARN;
-    else if (level >= 3) prio = ANDROID_LOG_INFO;
+    if (level <= LOGGER_ERR) prio = ANDROID_LOG_ERROR;
+    else if (level == LOGGER_WARNING) prio = ANDROID_LOG_WARN;
+    else if (level <= LOGGER_INFO) prio = ANDROID_LOG_INFO;
     __android_log_print(prio, TAG, "%s", msg);
 }
 
@@ -71,7 +72,7 @@ Java_com_example_shareplus_bridge_NativeBridge_nativeInit(
     }
     ctx->cb_ctx.raop = ctx->raop;
 
-    raop_set_log_level(ctx->raop, LOGGER_ERR);
+    raop_set_log_level(ctx->raop, LOGGER_INFO);
     raop_set_log_callback(ctx->raop, _log_callback, NULL);
 
     const char *keyfile_c = env->GetStringUTFChars(keyFile, NULL);

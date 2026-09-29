@@ -23,4 +23,6 @@ interface RaopCallbackHandler {
     fun onVideoStop()
     // fired per sender GET /playback-info poll; polling starts before /play
     fun onVideoSessionPoll()
+    // native audio engine log lines (log_sink.h)
+    fun onLog(msg: String)
 }

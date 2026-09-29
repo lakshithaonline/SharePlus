@@ -6,7 +6,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-#define LOG_SINK_TAG "AirPlayNative"
+#define LOG_SINK_TAG "UxPlay"
 
 /*
  * log sink writing to both app log UI and logcat. any thread may emit, but emitting can
