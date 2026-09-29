@@ -246,3 +246,20 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   `-DSHAREPLUS_VENDORED_OPENSSL=ON` still builds them on a Linux/macOS host).
 - Verified: APK contains `lib/armeabi-v7a/{libairplay_native,libcrypto,liboboe,libc++_shared}.so`;
   on the TV, `NativeBridge` loads with no `UnsatisfiedLinkError`.
+
+## Phases 3–6 — first iPhone tests (2026-09-29)
+- Native threads attached in `android_raop_callbacks.c` were never detached; ART aborts when
+  such a thread exits (every session end). Added a pthread TLS destructor that detaches.
+- UxPlay log levels are syslog-style (lower = worse); the bridge mapped them inverted. Fixed,
+  native tag is now `UxPlay`, level INFO.
+- Test 1: "SharePlus" listed on iPhone, mirroring shows the screen (portrait 500x1080).
+- **Bug:** opening YouTube switched the stream to 1920x1080 (new in-band SPS) → we restarted
+  the codec → `OMX.MS.AVC.Decoder` wouldn't accept input for ~5 s (~100 dropped frames, frozen
+  picture). Fix: configure once with `KEY_MAX_WIDTH/HEIGHT` 1920x1080 and, when the decoder has
+  `FEATURE_AdaptivePlayback`, let it switch resolution in place instead of restarting.
+- **YouTube while mirroring:** iOS video apps switch to "AirPlay video" (`video_pause` in logs,
+  iPhone goes black and becomes the remote). We didn't advertise HLS, so it stalled. Now HLS is
+  on: `onVideoPlay` → Media3 ExoPlayer (`HlsPlayer`), rate/scrub from the iPhone map to
+  pause/seek, position pushed back every 250 ms via `nativeUpdatePlaybackInfo`.
+- UI redone per user request: light, tvOS-like (white card, AirPlay glyph, status dot, steps).
+- `screencap` on this TV prints junk before the PNG; strip everything before `\x89PNG`.

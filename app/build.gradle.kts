@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.androidx.tv.material)
     implementation(libs.oboe)
     implementation(libs.openssl)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

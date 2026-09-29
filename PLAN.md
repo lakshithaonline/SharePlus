@@ -43,15 +43,15 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
       ✅ The app starts on the TV with no `UnsatisfiedLinkError`.
 
 ## Phase 3 — Discovery & connection
-- [ ] 3.1 🤖 `AirPlayServer` (start/stop, MulticastLock, server name "SharePlus"), running in a
+- [x] 3.1 🤖 `AirPlayServer` (start/stop, MulticastLock, server name "SharePlus"), running in a
       foreground service or tied to the Activity lifecycle.
       👤 Open Screen Mirroring on the iPhone. ✅ "SharePlus" is in the list.
-- [ ] 3.2 🤖 Connection lifecycle logging. 👤 Tap SharePlus on the iPhone.
+- [x] 3.2 🤖 Connection lifecycle logging. 👤 Tap SharePlus on the iPhone.
       ✅ logcat shows the pairing/FairPlay handshake succeeded and the stream started.
 
 ## Phase 4 — Video
-- [ ] 4.1 🤖 Video frames over JNI (direct ByteBuffers, correct thread attach/detach).
-- [ ] 4.2 🤖 `VideoDecoder`: MediaCodec H.264 → SurfaceView, csd handling, low-latency flags
+- [x] 4.1 🤖 Video frames over JNI (direct ByteBuffers, correct thread attach/detach).
+- [x] 4.2 🤖 `VideoDecoder`: MediaCodec H.264 → SurfaceView, csd handling, low-latency flags
       where supported on API 30.
       👤 Mirror. ✅ iPhone screen on the TV (🤖 confirms with `screencap`).
 - [ ] 4.3 🤖 Aspect ratio + portrait/landscape switching + mid-stream resolution changes.
@@ -63,8 +63,8 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
 - [ ] 5.2 🤖 A/V sync using RTP timestamps. ✅ No visible lip-sync drift over 5 min.
 
 ## Phase 6 — TV experience
-- [ ] 6.1 🤖 Idle screen: "Ready to mirror", TV name, IP, simple instructions.
-- [ ] 6.2 🤖 States Idle → Connecting → Mirroring → Disconnected; release codecs on stop.
+- [x] 6.1 🤖 Idle screen: "Ready to mirror", TV name, IP, simple instructions.
+- [x] 6.2 🤖 States Idle → Connecting → Mirroring → Disconnected; release codecs on stop.
 - [ ] 6.3 🤖 D-pad: Back = disconnect/exit; OK = info overlay. Keep the screen on while mirroring.
 - [ ] 6.4 🤖 Network loss → auto-restart the server; app backgrounded → stop cleanly.
 - [ ] 6.5 🤖 App banner + icon.

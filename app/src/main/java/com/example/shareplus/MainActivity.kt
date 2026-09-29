@@ -2,6 +2,7 @@ package com.example.shareplus
 
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -11,6 +12,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextClock
 import android.widget.TextView
@@ -25,28 +27,48 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+/**
+ * Light, tvOS-inspired receiver screen: a white card with the TV name, live status and
+ * three-step instructions on a soft grey backdrop. Mirrored / AirPlay video goes full
+ * screen on black.
+ */
 class MainActivity : ComponentActivity() {
 
     private lateinit var root: FrameLayout
-    private lateinit var surfaceView: SurfaceView
-    private lateinit var idle: LinearLayout
-    private lateinit var title: TextView
-    private lateinit var hint: TextView
-    private lateinit var address: TextView
-    private lateinit var status: TextView
+    private lateinit var mirrorView: SurfaceView
+    private lateinit var hlsView: SurfaceView
+    private lateinit var home: FrameLayout
+    private lateinit var card: LinearLayout
+    private lateinit var nameText: TextView
+    private lateinit var statusDot: View
+    private lateinit var statusText: TextView
+    private lateinit var step3: TextView
+    private lateinit var footer: TextView
     private lateinit var stats: TextView
+
+    private val density get() = resources.displayMetrics.density
+    private fun dp(v: Int) = (v * density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AirPlayService.start(this)
         buildViews()
 
-        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
+        mirrorView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) =
                 AirPlayService.video.attachSurface(holder.surface)
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {}
             override fun surfaceDestroyed(holder: SurfaceHolder) =
                 AirPlayService.video.detachSurface(holder.surface)
+        })
+        hlsView.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                AirPlayService.hls.attachSurface(holder.surface)
+            }
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {}
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                AirPlayService.hls.detachSurface(holder.surface)
+            }
         })
 
         lifecycleScope.launch {
@@ -56,8 +78,9 @@ class MainActivity : ComponentActivity() {
                         Triple(p, n, ip)
                     }.collect { (p, n, ip) -> render(p, n, ip) }
                 }
-                launch { AirPlayState.videoSize.collect { layoutVideo() } }
-                launch { driftIdle() }
+                launch { AirPlayState.videoSize.collect { fit(mirrorView, it) } }
+                launch { AirPlayState.hlsVideoSize.collect { fit(hlsView, it) } }
+                launch { drift() }
                 launch { refreshStats() }
             }
         }
@@ -74,51 +97,60 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun render(phase: Phase, name: String, ip: String?) {
-        val video = phase == Phase.MIRRORING
-        surfaceView.visibility = if (video) View.VISIBLE else View.INVISIBLE
-        idle.visibility = if (video) View.GONE else View.VISIBLE
-        // idle backdrop on the root, so the drifting idle text never exposes an edge
-        root.setBackgroundColor(if (video) Color.BLACK else IDLE_BG)
-        if (!video) stats.visibility = View.GONE
-        // keep the TV awake while something is playing, let it sleep when idle
-        if (video || phase == Phase.AUDIO_ONLY || phase == Phase.CONNECTING) {
+        val mirroring = phase == Phase.MIRRORING
+        val video = phase == Phase.VIDEO
+        // SurfaceViews stay VISIBLE (surfaces alive) and are covered by the home screen,
+        // so switching views never tears down a running decoder
+        mirrorView.alpha = if (mirroring) 1f else 0f
+        hlsView.alpha = if (video) 1f else 0f
+        home.visibility = if (mirroring || video) View.GONE else View.VISIBLE
+        if (!mirroring && !video) stats.visibility = View.GONE
+
+        if (phase != Phase.IDLE && phase != Phase.STOPPED && phase != Phase.PAUSED) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-        title.text = when (phase) {
-            Phase.STOPPED -> "Starting…"
-            Phase.IDLE, Phase.MIRRORING -> "Ready to mirror"
-            Phase.CONNECTING -> "Connecting…"
-            Phase.AUDIO_ONLY -> "Playing audio from iPhone"
-            Phase.PAUSED -> "Paused — unlock your iPhone to continue"
+
+        nameText.text = name
+        step3.text = "Choose  “$name”"
+        val (color, label) = when (phase) {
+            Phase.STOPPED -> GREY to "Starting…"
+            Phase.IDLE, Phase.MIRRORING, Phase.VIDEO -> GREEN to "Ready for AirPlay"
+            Phase.CONNECTING -> ORANGE to "Connecting…"
+            Phase.AUDIO_ONLY -> BLUE to "Playing audio from iPhone"
+            Phase.PAUSED -> ORANGE to "Paused — unlock your iPhone to continue"
         }
-        hint.text = "On your iPhone: swipe down from the top-right → Screen Mirroring → $name"
-        address.text = if (ip != null) "$name  ·  $ip" else name
-        status.text = "Tip: keep your iPhone awake — Settings → Display & Brightness → Auto-Lock → Never"
+        (statusDot.background as GradientDrawable).setColor(color)
+        statusText.text = label
+        footer.text = listOfNotNull(ip, "Tip: set Auto-Lock to Never so mirroring doesn’t stop when your iPhone sleeps")
+            .joinToString("   ·   ")
     }
 
-    // fit the video into the screen, keeping its aspect ratio (portrait iPhone = pillarbox)
-    private fun layoutVideo() {
-        val (vw, vh) = AirPlayState.videoSize.value
+    // fit a video into the screen keeping its aspect ratio (portrait iPhone = pillarbox)
+    private fun fit(view: SurfaceView, size: Pair<Int, Int>) {
+        val (vw, vh) = size
         val cw = root.width
         val ch = root.height
         if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return
         val scale = minOf(cw.toFloat() / vw, ch.toFloat() / vh)
-        val lp = surfaceView.layoutParams as FrameLayout.LayoutParams
-        lp.width = (vw * scale).toInt()
-        lp.height = (vh * scale).toInt()
+        val lp = view.layoutParams as FrameLayout.LayoutParams
+        val w = (vw * scale).toInt()
+        val h = (vh * scale).toInt()
+        if (lp.width == w && lp.height == h) return
+        lp.width = w
+        lp.height = h
         lp.gravity = Gravity.CENTER
-        surfaceView.layoutParams = lp
+        view.layoutParams = lp
     }
 
-    // move the idle text around slowly so a static screen doesn't burn in
-    private suspend fun driftIdle() {
+    // nudge the card a little every minute so a static screen doesn't burn in
+    private suspend fun drift() {
         while (true) {
-            idle.animate()
-                .translationX(Random.nextInt(-80, 81).toFloat())
-                .translationY(Random.nextInt(-50, 51).toFloat())
-                .setDuration(4000).start()
+            card.animate()
+                .translationX(Random.nextInt(-dp(24), dp(24) + 1).toFloat())
+                .translationY(Random.nextInt(-dp(16), dp(16) + 1).toFloat())
+                .setDuration(6000).start()
             delay(60_000)
         }
     }
@@ -127,17 +159,25 @@ class MainActivity : ComponentActivity() {
         while (true) {
             if (stats.visibility == View.VISIBLE) {
                 val v = AirPlayService.video
-                stats.text = "${v.width}x${v.height}  ·  ${v.fps} fps  ·  ${v.codecName}  ·  dropped ${v.dropped}"
+                stats.text = if (AirPlayState.phase.value == Phase.VIDEO) "AirPlay video"
+                    else "${v.width}×${v.height}   ${v.fps} fps   ${v.codecName}   dropped ${v.dropped}"
             }
             delay(500)
         }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val phase = AirPlayState.phase.value
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_INFO -> {
-                if (AirPlayState.phase.value == Phase.MIRRORING) {
+                if (phase == Phase.MIRRORING || phase == Phase.VIDEO) {
                     stats.visibility = if (stats.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                if (phase == Phase.VIDEO) {
+                    AirPlayService.hls.togglePause()
                     return true
                 }
             }
@@ -145,66 +185,135 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    // ---- views ----
+
+    private fun label(sizeSp: Float, color: Int, weight: String = "sans-serif") = TextView(this).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+        setTextColor(color)
+        typeface = Typeface.create(weight, Typeface.NORMAL)
+        includeFontPadding = false
+    }
+
+    private fun rounded(color: Int, radiusDp: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(radiusDp).toFloat()
+    }
+
+    private fun oval(color: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(color)
+    }
+
     private fun buildViews() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> layoutVideo() }
-
-        surfaceView = SurfaceView(this)
-        root.addView(surfaceView, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-
-        fun text(sizeSp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
-            setTextColor(color)
-            gravity = Gravity.CENTER
-            if (bold) typeface = Typeface.DEFAULT_BOLD
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            fit(mirrorView, AirPlayState.videoSize.value)
+            fit(hlsView, AirPlayState.hlsVideoSize.value)
         }
 
-        idle = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+        fun fullscreen() = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+        mirrorView = SurfaceView(this)
+        hlsView = SurfaceView(this)
+        root.addView(hlsView, fullscreen())
+        root.addView(mirrorView, fullscreen())
+
+        home = FrameLayout(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.rgb(251, 251, 253), Color.rgb(232, 232, 237)))
         }
-        val clock = TextClock(this).apply {
-            format12Hour = "h:mm"
+
+        // top bar: wordmark left, time right (like tvOS)
+        home.addView(label(18f, INK, "sans-serif-medium").apply { text = "SharePlus" },
+            FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { setMargins(dp(56), dp(40), 0, 0) })
+        home.addView(TextClock(this).apply {
+            format12Hour = "h:mm a"
             format24Hour = "HH:mm"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 96f)
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-        }
-        val date = TextClock(this).apply {
-            format12Hour = "EEEE, d MMMM"
-            format24Hour = "EEEE, d MMMM"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-            setTextColor(Color.rgb(170, 180, 200))
-        }
-        title = text(34f, Color.WHITE, bold = true)
-        hint = text(20f, Color.rgb(200, 210, 230))
-        address = text(16f, Color.rgb(120, 135, 160))
-        status = text(14f, Color.rgb(100, 115, 140))
-        clock.gravity = Gravity.CENTER
-        date.gravity = Gravity.CENTER
-        listOf(clock, date, title, hint, address, status).forEach { idle.addView(it) }
-        // spacing above each line after the clock
-        listOf(date to 0, title to 40, hint to 16, address to 28, status to 8).forEach { (v, dp) ->
-            (v.layoutParams as LinearLayout.LayoutParams).topMargin =
-                (dp * resources.displayMetrics.density).toInt()
-        }
-        root.addView(idle, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(40), dp(56), 0) })
 
-        stats = text(16f, Color.WHITE).apply {
-            setBackgroundColor(Color.argb(170, 0, 0, 0))
-            setPadding(24, 12, 24, 12)
+        card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(Color.WHITE, 36)
+            elevation = dp(18).toFloat()
+            setPadding(dp(56), dp(36), dp(56), dp(32))
+            minimumWidth = dp(480)
+        }
+
+        val icon = FrameLayout(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(10, 132, 255), Color.rgb(94, 92, 230))).apply { shape = GradientDrawable.OVAL }
+            addView(ImageView(this@MainActivity).apply { setImageResource(R.drawable.ic_airplay) },
+                FrameLayout.LayoutParams(dp(34), dp(34), Gravity.CENTER))
+        }
+        card.addView(icon, LinearLayout.LayoutParams(dp(68), dp(68)))
+
+        nameText = label(32f, INK, "sans-serif-medium").apply { gravity = Gravity.CENTER }
+        card.addView(nameText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
+
+        val status = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        statusDot = View(this).apply { background = oval(GREEN) }
+        statusText = label(16f, SECONDARY)
+        status.addView(statusDot, LinearLayout.LayoutParams(dp(10), dp(10)).apply { marginEnd = dp(10) })
+        status.addView(statusText)
+        card.addView(status, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
+
+        card.addView(View(this).apply { setBackgroundColor(HAIRLINE) },
+            LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(24); bottomMargin = dp(20) })
+
+        fun step(n: Int, text: String): TextView {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(label(13f, INK, "sans-serif-medium").apply {
+                this.text = n.toString()
+                gravity = Gravity.CENTER
+                background = oval(FILL)
+            }, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(14) })
+            val t = label(16f, INK).apply { this.text = text }
+            row.addView(t)
+            card.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(if (n == 1) 0 else 10) })
+            return t
+        }
+        step(1, "Open Control Centre on your iPhone")
+        step(2, "Tap  Screen Mirroring")
+        step3 = step(3, "")
+
+        home.addView(card, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+
+        footer = label(12f, TERTIARY).apply { gravity = Gravity.CENTER }
+        home.addView(footer, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { bottomMargin = dp(28) })
+
+        root.addView(home, fullscreen())
+
+        stats = label(16f, Color.WHITE, "sans-serif-medium").apply {
+            background = rounded(Color.argb(170, 28, 28, 30), 18)
+            setPadding(dp(18), dp(10), dp(18), dp(10))
             visibility = View.GONE
         }
-        root.addView(stats, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.END).apply { setMargins(32, 32, 32, 32) })
+        root.addView(stats, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END)
+            .apply { setMargins(dp(32), dp(32), dp(32), dp(32)) })
 
         setContentView(root)
     }
 
     private companion object {
-        val IDLE_BG = Color.rgb(10, 14, 24)
+        // Apple system colours (light)
+        val INK = Color.rgb(29, 29, 31)
+        val SECONDARY = Color.rgb(110, 110, 115)
+        val TERTIARY = Color.rgb(134, 134, 139)
+        val HAIRLINE = Color.rgb(229, 229, 234)
+        val FILL = Color.rgb(242, 242, 247)
+        val GREEN = Color.rgb(52, 199, 89)
+        val ORANGE = Color.rgb(255, 159, 10)
+        val BLUE = Color.rgb(0, 122, 255)
+        val GREY = Color.rgb(174, 174, 178)
     }
 }

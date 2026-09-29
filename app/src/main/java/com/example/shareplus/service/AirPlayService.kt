@@ -25,6 +25,7 @@ import com.example.shareplus.MainActivity
 import com.example.shareplus.R
 import com.example.shareplus.bridge.NativeBridge
 import com.example.shareplus.bridge.RaopCallbackHandler
+import com.example.shareplus.video.HlsPlayer
 import com.example.shareplus.video.VideoRenderer
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -44,6 +45,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     private var nsd: NsdPublisher? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var connections = 0
+    private var mirrorRunning = false
     private var serverIp: String? = null
     private val backToIdle = Runnable { if (AirPlayState.phase.value == Phase.PAUSED) AirPlayState.phase.value = Phase.IDLE }
 
@@ -67,6 +69,11 @@ class AirPlayService : Service(), RaopCallbackHandler {
         audio = getSystemService(AUDIO_SERVICE) as AudioManager
         goForeground()
         video.onVideoSize = { w, h -> AirPlayState.videoSize.value = w to h }
+        hls.onVideoSize = { w, h -> AirPlayState.hlsVideoSize.value = w to h }
+        hls.onInfo = { pos, dur, rate, ready ->
+            if (handle != 0L) NativeBridge.nativeUpdatePlaybackInfo(handle, pos, dur, rate, ready)
+        }
+        hls.onEnded = { endVideo() }
         startServer()
         (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager)
             .registerDefaultNetworkCallback(networkCallback)
@@ -125,7 +132,8 @@ class AirPlayService : Service(), RaopCallbackHandler {
         NativeBridge.nativeSetH265Enabled(handle, false)
         // no ffmpeg in this build (NOTES.md 2.2): ask senders for AAC, never ALAC
         NativeBridge.nativeSetCodecs(handle, false, true)
-        NativeBridge.nativeSetHlsEnabled(handle, false)
+        // "AirPlay video": YouTube & co. send a stream URL instead of mirroring (PLAN 9.4)
+        NativeBridge.nativeSetHlsEnabled(handle, true)
         NativeBridge.nativeSetAudioEnabled(handle, true)
         NativeBridge.nativeSetLang(handle, "", "", resources.configuration.locales.toLanguageTags().replace(',', ':'))
         NativeBridge.nativeSetPlist(handle, "maxFPS", 60)
@@ -158,6 +166,8 @@ class AirPlayService : Service(), RaopCallbackHandler {
         nsd?.release()
         nsd = null
         video.stop()
+        hls.stop()
+        mirrorRunning = false
         if (handle != 0L) {
             NativeBridge.nativeStop(handle)
             NativeBridge.nativeDestroy(handle)
@@ -226,6 +236,9 @@ class AirPlayService : Service(), RaopCallbackHandler {
             if (connections == 0) {
                 if (handle != 0L) NativeBridge.nativeServerAudioStop(handle)
                 video.stop()
+                // senders may drop without POST /stop
+                if (AirPlayState.phase.value == Phase.VIDEO) hls.stop()
+                mirrorRunning = false
                 val p = AirPlayState.phase.value
                 if (p != Phase.IDLE && p != Phase.STOPPED) setPhase(Phase.PAUSED)
             }
@@ -239,7 +252,21 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onMirrorRunning(running: Boolean) {
         Log.i(TAG, "mirroring ${if (running) "started" else "stopped"}")
         if (!running) video.stop()
-        main.post { setPhase(if (running) Phase.MIRRORING else Phase.PAUSED) }
+        main.post {
+            mirrorRunning = running
+            // AirPlay video keeps playing on its own when mirroring stops
+            if (AirPlayState.phase.value != Phase.VIDEO) setPhase(if (running) Phase.MIRRORING else Phase.PAUSED)
+        }
+    }
+
+    private fun endVideo() = main.post {
+        if (AirPlayState.phase.value != Phase.VIDEO) return@post
+        Log.i(TAG, "AirPlay video ended")
+        setPhase(when {
+            mirrorRunning -> Phase.MIRRORING
+            connections > 0 -> Phase.CONNECTING
+            else -> Phase.IDLE
+        })
     }
 
     override fun onVideoData(data: ByteArray, ntpTimeNs: Long, isH265: Boolean) {
@@ -286,11 +313,26 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onCoverArt(data: ByteArray) {}
     override fun onProgress(start: Long, curr: Long, end: Long) {}
     override fun onDacpId(dacpId: String, activeRemote: String) {}
-    // HLS (YouTube AirPlay) is PLAN 9.4 and not advertised yet
-    override fun onVideoPlay(location: String, startPositionSeconds: Float) {}
-    override fun onVideoScrub(positionSeconds: Float) {}
-    override fun onVideoRate(rate: Float) {}
-    override fun onVideoStop() {}
+    override fun onVideoPlay(location: String, startPositionSeconds: Float) {
+        hls.play(applicationContext, location, startPositionSeconds)
+        main.post {
+            setPhase(Phase.VIDEO)
+            bringToFront()
+        }
+    }
+
+    override fun onVideoScrub(positionSeconds: Float) {
+        hls.seek(positionSeconds)
+    }
+
+    override fun onVideoRate(rate: Float) {
+        hls.setRate(rate)
+    }
+
+    override fun onVideoStop() {
+        hls.stop()
+        endVideo()
+    }
     override fun onVideoSessionPoll() {}
 
     companion object {
@@ -302,6 +344,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
         // shared with MainActivity, which attaches its SurfaceView to it
         val video = VideoRenderer()
+        val hls = HlsPlayer()
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, AirPlayService::class.java))

@@ -2,6 +2,7 @@ package com.example.shareplus.video
 
 import android.graphics.SurfaceTexture
 import android.media.MediaCodec
+import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
 import android.os.SystemClock
@@ -23,6 +24,7 @@ class VideoRenderer {
     private val lock = Any()
     private var codec: MediaCodec? = null
     private var codecIsH265 = false
+    private var adaptive = false
     private var paramSets: ByteArray? = null   // SPS/VPS the running codec was started with
     private var drainThread: Thread? = null
     @Volatile private var draining = false
@@ -64,11 +66,13 @@ class VideoRenderer {
     // called on the native mirror thread for every frame
     fun feed(data: ByteArray, ptsNs: Long, isH265: Boolean) = synchronized(lock) {
         val sets = parameterSets(data, isH265)
+        // resolution changes (rotation, YouTube going full screen) arrive as new in-band
+        // SPS; an adaptive decoder switches in place, others need a fresh codec. Restarting
+        // OMX.MS.AVC.Decoder stalls its input for ~5s (NOTES.md 4.3), so avoid it when possible
         val restart = codec == null || isH265 != codecIsH265 ||
-            (sets != null && !sets.contentEquals(paramSets))
+            (!adaptive && sets != null && !sets.contentEquals(paramSets))
         if (restart) {
-            // new stream, codec switch, or resolution change (iPhone rotated): a fresh
-            // codec needs the parameter sets, so wait for a frame that carries them
+            // a fresh codec needs the parameter sets, so wait for a frame that carries them
             if (sets == null) return@synchronized
             stopCodec()
             if (!startCodec(isH265)) return@synchronized
@@ -107,10 +111,14 @@ class VideoRenderer {
             return false
         }
         val target = display ?: parking
+        adaptive = runCatching {
+            c.codecInfo.getCapabilitiesForType(mime)
+                .isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_AdaptivePlayback)
+        }.getOrDefault(false)
         // low-latency first; some vendor decoders reject unknown keys, so fall back to plain
         val configured = listOf(true, false).any { lowLatency ->
             try {
-                c.configure(videoFormat(mime, lowLatency), target, null, 0)
+                c.configure(videoFormat(mime, lowLatency, adaptive), target, null, 0)
                 true
             } catch (e: Exception) {
                 Log.w(TAG, "configure(lowLatency=$lowLatency) failed", e)
@@ -127,14 +135,19 @@ class VideoRenderer {
         codecIsH265 = isH265
         codecName = c.name
         queuedAny = false
-        Log.i(TAG, "decoder started: ${c.name} ($mime)")
+        Log.i(TAG, "decoder started: ${c.name} ($mime, adaptive=$adaptive)")
         draining = true
         drainThread = Thread({ drain(c) }, "video-drain").apply { start() }
         return true
     }
 
-    private fun videoFormat(mime: String, lowLatency: Boolean) =
-        MediaFormat.createVideoFormat(mime, 1920, 1080).apply {
+    private fun videoFormat(mime: String, lowLatency: Boolean, adaptive: Boolean) =
+        MediaFormat.createVideoFormat(mime, MAX_W, MAX_H).apply {
+            // every stream fits inside the 1920x1080 display we advertise to the iPhone
+            if (adaptive) {
+                setInteger(MediaFormat.KEY_MAX_WIDTH, MAX_W)
+                setInteger(MediaFormat.KEY_MAX_HEIGHT, MAX_H)
+            }
             if (lowLatency) {
                 if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
                 setInteger(MediaFormat.KEY_PRIORITY, 0)  // realtime
@@ -196,6 +209,8 @@ class VideoRenderer {
 
     companion object {
         private const val TAG = "SharePlus"
+        private const val MAX_W = 1920
+        private const val MAX_H = 1080
 
         // concatenated SPS (+VPS for H.265) NAL units in an Annex-B frame, or null if none
         fun parameterSets(data: ByteArray, isH265: Boolean): ByteArray? {
