@@ -37,9 +37,9 @@ iPhone ──Wi-Fi──► [UxPlay C core: mDNS + RTSP + FairPlay + decrypt]
 
 ## Phase 2 — Native core
 - [x] 2.1 🤖 Vendor `third_party` (UxPlay, libplist, OpenSSL, FFmpeg) into `app/src/main/cpp`, keeping licences.
-- [ ] 2.2 🤖 CMakeLists + `externalNativeBuild` + `abiFilters` for the TV's ABI(s).
+- [x] 2.2 🤖 CMakeLists + `externalNativeBuild` + `abiFilters` for the TV's ABI(s).
       ✅ `assembleDebug` succeeds; the `.so` files are in the APK (`unzip -l`).
-- [ ] 2.3 🤖 Port the JNI bridge (adapt package names to `com.example.shareplus`).
+- [x] 2.3 🤖 Port the JNI bridge (adapt package names to `com.example.shareplus`).
       ✅ The app starts on the TV with no `UnsatisfiedLinkError`.
 
 ## Phase 3 — Discovery & connection

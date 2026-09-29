@@ -8,6 +8,7 @@ android {
     compileSdk {
         version = release(37)
     }
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.example.shareplus"
@@ -16,6 +17,22 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // this TV (JVC JV5524M) is armeabi-v7a/armeabi only -- see NOTES.md Phase 0.3
+        ndk {
+            abiFilters += "armeabi-v7a"
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments += "-DANDROID_STL=c++_shared"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
     }
 
     buildTypes {
@@ -31,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        prefab = true
     }
 }
 
@@ -45,6 +63,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.tv.foundation)
     implementation(libs.androidx.tv.material)
+    implementation(libs.oboe)
+    implementation(libs.openssl)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

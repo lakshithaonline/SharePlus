@@ -8,6 +8,8 @@ tvFoundation = "1.0.0-alpha07"
 tvMaterial = "1.0.0-alpha07"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.13.0"
+oboe = "1.11.0"
+openssl = "1.1.1q-beta-1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -23,6 +25,8 @@ androidx-tv-foundation = { group = "androidx.tv", name = "tv-foundation", versio
 androidx-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "tvMaterial" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+oboe = { group = "com.google.oboe", name = "oboe", version.ref = "oboe" }
+openssl = { group = "com.android.ndk.thirdparty", name = "openssl", version.ref = "openssl" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

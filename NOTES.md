@@ -230,3 +230,19 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   because of UxPlay regardless of the other components' more permissive licenses.
 - Not yet building anything with this — that's 2.2 (CMakeLists + externalNativeBuild). NDK/CMake
   still not installed (see 0.1) — need to resolve before 2.2 can succeed.
+
+### 2.2 / 2.3 — Native build + JNI bridge (done)
+- NDK 27.0.12077973 + CMake 3.22.1 installed via Android Studio; `ndkVersion` pinned in Gradle.
+- **Problem:** OpenSSL (`openssl-cmake` → perl `Configure` + make) and FFmpeg (`configure` + make)
+  can't build on a plain Windows host: FFmpeg's configure (run in Git bash) writes MSYS paths
+  (`/c/Users/...`) that the NDK's native `make.exe` can't open; OpenSSL's build env picked a bash
+  with no `perl`/`cygpath`.
+- **Fix:** OpenSSL now comes from Google's prebuilt Prefab AAR
+  `com.android.ndk.thirdparty:openssl:1.1.1q-beta-1` (`openssl::crypto`, ships `libcrypto.so`).
+  UxPlay's `crypto.c` only needs 1.1.1-level EVP APIs (raw X25519/Ed25519 keys). FFmpeg is now
+  optional (`-DSHAREPLUS_FFMPEG=ON`, `SHAREPLUS_HAVE_FFMPEG` guards in `audio_decoder.h`): it was
+  only the software **ALAC** fallback. Mirroring audio is AAC-ELD via MediaCodec, and we advertise
+  AAC (not ALAC) for audio-only mode. Vendored sources stay in-tree (and
+  `-DSHAREPLUS_VENDORED_OPENSSL=ON` still builds them on a Linux/macOS host).
+- Verified: APK contains `lib/armeabi-v7a/{libairplay_native,libcrypto,liboboe,libc++_shared}.so`;
+  on the TV, `NativeBridge` loads with no `UnsatisfiedLinkError`.
