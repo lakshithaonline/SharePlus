@@ -25,7 +25,6 @@ import com.example.shareplus.service.AirPlayService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 /**
  * Light, tvOS-inspired receiver screen: a white card with the TV name, live status and
@@ -80,7 +79,6 @@ class MainActivity : ComponentActivity() {
                 }
                 launch { AirPlayState.videoSize.collect { fit(mirrorView, it) } }
                 launch { AirPlayState.hlsVideoSize.collect { fit(hlsView, it) } }
-                launch { drift() }
                 launch { refreshStats() }
             }
         }
@@ -142,17 +140,6 @@ class MainActivity : ComponentActivity() {
         lp.height = h
         lp.gravity = Gravity.CENTER
         view.layoutParams = lp
-    }
-
-    // nudge the card a little every minute so a static screen doesn't burn in
-    private suspend fun drift() {
-        while (true) {
-            card.animate()
-                .translationX(Random.nextInt(-dp(24), dp(24) + 1).toFloat())
-                .translationY(Random.nextInt(-dp(16), dp(16) + 1).toFloat())
-                .setDuration(6000).start()
-            delay(60_000)
-        }
     }
 
     private suspend fun refreshStats() {
