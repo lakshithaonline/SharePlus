@@ -269,3 +269,8 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   the YouTube app's own behaviour, not a receiver fault. User chose plain mirroring only, so
   AirPlay video (HLS/ExoPlayer) was removed again and HLS is no longer advertised.
 - UI: user wants a static screen, so the burn-in drift animation was removed.
+- **4K attempt (reverted at user's request):** TV only exposes 1920x1080 @60/50 Hz display modes
+  to apps (the >60 Hz is panel-internal). With H.265 on and 3840x2160 advertised, the iPhone sent
+  HEVC 998x2160 at ~46 fps and `OMX.MS.HEVC.Decoder` output was **green and smeared**. Pinning
+  SDR BT.709 colour keys was tried but never verified; user chose to go back to 1080p H.264,
+  which is clean. Screenshot of the failure mode was taken via `screencap`.
