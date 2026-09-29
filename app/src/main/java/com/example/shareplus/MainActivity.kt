@@ -28,14 +28,13 @@ import kotlinx.coroutines.launch
 
 /**
  * Light, tvOS-inspired receiver screen: a white card with the TV name, live status and
- * three-step instructions on a soft grey backdrop. Mirrored / AirPlay video goes full
- * screen on black.
+ * three-step instructions on a soft grey backdrop. Mirroring goes full screen
+ * on black.
  */
 class MainActivity : ComponentActivity() {
 
     private lateinit var root: FrameLayout
     private lateinit var mirrorView: SurfaceView
-    private lateinit var hlsView: SurfaceView
     private lateinit var home: FrameLayout
     private lateinit var card: LinearLayout
     private lateinit var nameText: TextView
@@ -60,15 +59,6 @@ class MainActivity : ComponentActivity() {
             override fun surfaceDestroyed(holder: SurfaceHolder) =
                 AirPlayService.video.detachSurface(holder.surface)
         })
-        hlsView.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                AirPlayService.hls.attachSurface(holder.surface)
-            }
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {}
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                AirPlayService.hls.detachSurface(holder.surface)
-            }
-        })
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -78,7 +68,6 @@ class MainActivity : ComponentActivity() {
                     }.collect { (p, n, ip) -> render(p, n, ip) }
                 }
                 launch { AirPlayState.videoSize.collect { fit(mirrorView, it) } }
-                launch { AirPlayState.hlsVideoSize.collect { fit(hlsView, it) } }
                 launch { refreshStats() }
             }
         }
@@ -96,13 +85,10 @@ class MainActivity : ComponentActivity() {
 
     private fun render(phase: Phase, name: String, ip: String?) {
         val mirroring = phase == Phase.MIRRORING
-        val video = phase == Phase.VIDEO
-        // SurfaceViews stay VISIBLE (surfaces alive) and are covered by the home screen,
-        // so switching views never tears down a running decoder
-        mirrorView.alpha = if (mirroring) 1f else 0f
-        hlsView.alpha = if (video) 1f else 0f
-        home.visibility = if (mirroring || video) View.GONE else View.VISIBLE
-        if (!mirroring && !video) stats.visibility = View.GONE
+        // the SurfaceView stays VISIBLE (surface alive) under the home screen, so showing
+        // the home screen never tears down a running decoder
+        home.visibility = if (mirroring) View.GONE else View.VISIBLE
+        if (!mirroring) stats.visibility = View.GONE
 
         if (phase != Phase.IDLE && phase != Phase.STOPPED && phase != Phase.PAUSED) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -114,7 +100,7 @@ class MainActivity : ComponentActivity() {
         step3.text = "Choose  “$name”"
         val (color, label) = when (phase) {
             Phase.STOPPED -> GREY to "Starting…"
-            Phase.IDLE, Phase.MIRRORING, Phase.VIDEO -> GREEN to "Ready for AirPlay"
+            Phase.IDLE, Phase.MIRRORING -> GREEN to "Ready for AirPlay"
             Phase.CONNECTING -> ORANGE to "Connecting…"
             Phase.AUDIO_ONLY -> BLUE to "Playing audio from iPhone"
             Phase.PAUSED -> ORANGE to "Paused — unlock your iPhone to continue"
@@ -146,8 +132,7 @@ class MainActivity : ComponentActivity() {
         while (true) {
             if (stats.visibility == View.VISIBLE) {
                 val v = AirPlayService.video
-                stats.text = if (AirPlayState.phase.value == Phase.VIDEO) "AirPlay video"
-                    else "${v.width}×${v.height}   ${v.fps} fps   ${v.codecName}   dropped ${v.dropped}"
+                stats.text = "${v.width}×${v.height}   ${v.fps} fps   ${v.codecName}   dropped ${v.dropped}"
             }
             delay(500)
         }
@@ -157,14 +142,8 @@ class MainActivity : ComponentActivity() {
         val phase = AirPlayState.phase.value
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_INFO -> {
-                if (phase == Phase.MIRRORING || phase == Phase.VIDEO) {
+                if (phase == Phase.MIRRORING) {
                     stats.visibility = if (stats.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                    return true
-                }
-            }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                if (phase == Phase.VIDEO) {
-                    AirPlayService.hls.togglePause()
                     return true
                 }
             }
@@ -195,14 +174,11 @@ class MainActivity : ComponentActivity() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             fit(mirrorView, AirPlayState.videoSize.value)
-            fit(hlsView, AirPlayState.hlsVideoSize.value)
         }
 
         fun fullscreen() = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
         mirrorView = SurfaceView(this)
-        hlsView = SurfaceView(this)
-        root.addView(hlsView, fullscreen())
         root.addView(mirrorView, fullscreen())
 
         home = FrameLayout(this).apply {

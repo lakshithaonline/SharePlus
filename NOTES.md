@@ -263,3 +263,9 @@ video/audio streaming) — not needed for our Phase 1-8 critical path.
   pause/seek, position pushed back every 250 ms via `nativeUpdatePlaybackInfo`.
 - UI redone per user request: light, tvOS-like (white card, AirPlay glyph, status dot, steps).
 - `screencap` on this TV prints junk before the PNG; strip everything before `\x89PNG`.
+- Test 2: adaptive decoder works (portrait 500x1080 ↔ 1920x1080 ↔ landscape 1920x888 switch in
+  place, 2 drops in total). YouTube never used the HLS path: it treats the mirrored TV as a
+  **second screen** (stream jumps to 1920x1080, iPhone goes black, no audio until play). That is
+  the YouTube app's own behaviour, not a receiver fault. User chose plain mirroring only, so
+  AirPlay video (HLS/ExoPlayer) was removed again and HLS is no longer advertised.
+- UI: user wants a static screen, so the burn-in drift animation was removed.
